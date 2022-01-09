@@ -1,13 +1,14 @@
 library(survival)
 library(ranger)
 library(distr6)
-library(survivalsvm)
+library(mboost)
 library(mlr3proba)
 
 set.seed(20220109)
 
 ## Get data and variables
 data = survival::rats
+data$sex = as.integer(data$sex == "f")
 train = sample(nrow(data), nrow(data) * 2/3)
 test = setdiff(seq(nrow(data)), train)
 test_unique_times = data$time[test]
@@ -22,8 +23,8 @@ p_ranger = predict(
   ranger(Surv(time, status) ~ ., data = data[train, ]),
   data = data[test, ]
 )
-p_svm = predict(
-  survivalsvm(Surv(time, status) ~ ., data = data[train, ], gamma.mu = 0.1),
+p_gbm = predict(
+  blackboost(Surv(time, status) ~ ., data = data[train, ], family = Cindex()),
   newdata = data[test, ]
 )
 
@@ -73,22 +74,22 @@ antolini = function (truth, surv, surv_idx) {
     sum_comparable(durations, events)
 }
 
-## Calculative Cindex for CPH and SVM
+## Calculative Cindex for CPH and GBM
 # Harrell
 harrell_cph = concordance(target ~ p_cox_lp, reverse = TRUE)$concordance
 harrell_rsf = NA
-harrell_svm = concordance(target ~ p_svm$predicted[1,])$concordance
+harrell_gbm = concordance(target ~ p_gbm)$concordance
 
 # Uno
 uno_cph = concordance(target ~ p_cox_lp, reverse = TRUE, timewt = "n/G2")$concordance
 uno_rsf = NA
-uno_svm = concordance(target ~ p_svm$predicted[1,], timewt = "n/G2")$concordance
+uno_gbm = concordance(target ~ p_gbm, timewt = "n/G2")$concordance
 
 
 ## Method 1 - Ensemble mortality - higher value = more deaths = higher risk
 ensemble_rsf = concordance(target ~ rowSums(p_ranger$chf), reverse = TRUE)$concordance
 ensemble_cph = concordance(target ~ rowSums(-log(t(p_cox_surv$surv))), reverse = TRUE)$concordance
-ensemble_svm = NA
+ensemble_gbm = NA
 
 ## Method 2 - Antolini
 antolini_rsf = antolini(
@@ -99,7 +100,7 @@ antolini_cph = antolini(
   target, p_cox_surv$surv,
   findInterval(target[, "time"], p_cox_surv$time, all.inside = TRUE)
 )
-antolini_svm = NA
+antolini_gbm = NA
 
 
 ## Method 3 - Distribution summary (no extrapolation)
@@ -111,7 +112,7 @@ colnames(ranger_surv) = p_ranger$unique.death.times
 # Higher value = longer expected lifetime = lower risk - Absurd value due to improper distribution
 summary_naive_cph = concordance(target ~ distr6::as.Distribution(1 - cox_surv, fun = "cdf")$mean())$concordance
 summary_naive_rsf = concordance(target ~ distr6::as.Distribution(1 - ranger_surv, fun = "cdf")$mean())$concordance
-summary_naive_svm = NA
+summary_naive_gbm = NA
 
 ## Method 4 - Distribution summary (extrapolation)
 cox_surv = cbind(1, cox_surv, 0) # Add probabilities 1 and 0
@@ -123,7 +124,7 @@ colnames(ranger_surv)[ncol(ranger_surv)] = tail(p_ranger$unique.death.times, 1) 
 
 summary_extr_cph = concordance(target ~ distr6::as.Distribution(1 - cox_surv, fun = "cdf")$mean())$concordance
 summary_extr_rsf = concordance(target ~ distr6::as.Distribution(1 - ranger_surv, fun = "cdf")$mean())$concordance
-summary_extr_svm = NA
+summary_extr_gbm = NA
 
 ## Method 5 - Single probability comparison
 distr_cox = distr6::as.Distribution(1 - cox_surv, fun = "cdf")
@@ -144,22 +145,22 @@ rsf_rand = sample(seq_along(rsf_prob_concordance), 1)
 
 prob_cph = cox_prob_concordance[c(rsf_min, rsf_max, rsf_rand)]
 prob_rsf = rsf_prob_concordance[c(rsf_min, rsf_max, rsf_rand)]
-prob_svm = rep(NA, 3)
+prob_gbm = rep(NA, 3)
 
-stargazer::stargazer(matrix(c(
-  harrell_cph, harrell_rsf, harrell_svm,
-  uno_cph, uno_rsf, uno_svm,
-  antolini_cph, antolini_rsf, antolini_svm,
-  prob_cph[1], prob_rsf[1], prob_svm[1],
-  prob_cph[2], prob_rsf[2], prob_svm[2],
-  prob_cph[3], prob_rsf[3], prob_svm[3],
-  summary_naive_cph, summary_naive_rsf, summary_naive_svm,
-  summary_extr_cph, summary_extr_rsf, summary_extr_svm,
-  ensemble_cph, ensemble_rsf, ensemble_svm
+matrix(c(
+  harrell_cph, harrell_rsf, harrell_gbm,
+  uno_cph, uno_rsf, uno_gbm,
+  antolini_cph, antolini_rsf, antolini_gbm,
+  prob_cph[1], prob_rsf[1], prob_gbm[1],
+  prob_cph[2], prob_rsf[2], prob_gbm[2],
+  prob_cph[3], prob_rsf[3], prob_gbm[3],
+  summary_naive_cph, summary_naive_rsf, summary_naive_gbm,
+  summary_extr_cph, summary_extr_rsf, summary_extr_gbm,
+  ensemble_cph, ensemble_rsf, ensemble_gbm
 ),
 ncol = 3, byrow = TRUE,
 dimnames = list(c(
   "Harrell", "Uno", "Antolini", "Prob (min)", "Prob (max)",
   "Prob (rand)", "Summary (naive)", "Summary (extr)", "Ensemble"
-), c("CPH", "RSF", "SVM"))
-), summary = FALSE)
+), c("CPH", "RSF", "GBM"))
+)
