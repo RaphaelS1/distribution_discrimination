@@ -32,11 +32,9 @@ p_lin <- dat2 %>%
   annotate("text", x = mean - 20, y = 0.05, label = expression(mu ~ "= 386")) +
   geom_vline(xintercept = 104, lty = 3)
 
-jpeg("fig2.jpeg", 10, 13, "cm", res = 300)
 p_orig + p_drop + p_lin +
   plot_layout(1, 3) &
   theme_classic() &
   labs(y = "S(T)") &
   ylim(0, 1) &
   geom_hline(yintercept = 0.5, lty = 2)
-dev.off()
