@@ -2,6 +2,7 @@ library(ggplot2)
 library(survival)
 library(dplyr)
 library(patchwork)
+library(distr6)
 
 fit <- survfit(Surv(time, status) ~ 1, rats)
 dat <- data.frame(S = fit$surv, T = fit$time)
@@ -35,6 +36,6 @@ p_lin <- dat2 %>%
 p_orig + p_drop + p_lin +
   plot_layout(1, 3) &
   theme_classic() &
-  labs(y = "S(T)") &
+  labs(y = "S(T)", x = "T (Days)") &
   ylim(0, 1) &
   geom_hline(yintercept = 0.5, lty = 2)
