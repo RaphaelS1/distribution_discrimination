@@ -33,9 +33,11 @@ p_lin <- dat2 %>%
   annotate("text", x = mean - 20, y = 0.05, label = expression(mu ~ "= 386")) +
   geom_vline(xintercept = 104, lty = 3)
 
-p_orig + p_drop + p_lin +
+fig2 <- p_orig + p_drop + p_lin +
   plot_layout(1, 3) &
   theme_classic() &
-  labs(y = "S(T)", x = "T (Days)") &
+  labs(y = "S(T)", x = "T (Weeks)") &
   ylim(0, 1) &
   geom_hline(yintercept = 0.5, lty = 2)
+
+ggsave("fig2.png", fig2, width = 1181, height = 1535, units = "px")
